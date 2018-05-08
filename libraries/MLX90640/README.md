@@ -1,4 +1,5 @@
-#  MLX90640 Library for digilent/chipkit development boards 
+#  MLX90640 Library for digilent/chipkit development boards under MPIDE
+
 
 <img src="https://img.youtube.com/vi/YUhuSzEcOfA/0.jpg" height="300"/>
 
