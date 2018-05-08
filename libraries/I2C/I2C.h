@@ -60,8 +60,10 @@ class I2C
   public:
     I2C(uint32_t freq = 100000);
     uint8_t read (uint8_t dev, uint8_t reg, uint16_t size, uint8_t * data, uint8_t rs);
+    uint8_t read (uint8_t dev, uint16_t reg, uint16_t size, uint16_t * data, uint8_t rs);
     uint8_t read_byte (uint8_t dev, uint8_t reg, uint8_t rs);
     void write_byte (uint8_t dev, uint8_t reg, uint8_t data);
+    void write_word(uint8_t dev, uint16_t reg, uint16_t data);
     void write (uint8_t dev, uint8_t reg, uint16_t size, uint8_t * data);
 
   private:

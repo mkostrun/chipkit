@@ -1,25 +1,13 @@
 /*!
- * @file MPL3115A2.cpp
+ * @file I2C.cpp
  *
- * @mainpage MPL3115A2 alitmeter
+ * @mainpage I2C class for chipkit/digilent uno32, max32 and wf32 (PIC32 MX) development boards
  *
  * @section intro_sec Introduction
- *
- * This is the documentation for MPL3115A2 driver for the Digilent
- * UNO32 platform.  It is designed specifically to work with the
- * Adafruit MPL3115A2 breakout board: https://www.adafruit.com/products/1893
- *
- * These sensors use I2C to communicate, 2 pins (SCL+SDA) are required
- * to interface with the breakout.
- *
- *
- * @section dependencies Dependencies
  *
  * @section author Author
  *
  * Written by Marijan Kostrun. 
- * Inspired by the Adafruit_MPL3115A2 library written
- * by Kevin "KTOWN" Townsend for Adafruit Industries.
  *
  * @section license License
  *
@@ -31,8 +19,9 @@
 
 /**************************************************************************/
 /*!
-    @brief  Instantiates a new MPL3115A2 class
-*/
+    @brief Instantiates I2C class
+    @param freq frequency of I2C bus
+ */
 /**************************************************************************/
 I2C::I2C(uint32_t freq)
 {
@@ -63,8 +52,10 @@ I2C::I2C(uint32_t freq)
 
 /**************************************************************************/
 /*!
-    @brief  read 1 byte of data at the specified address
-    @param reg the address to read
+    @brief read a byte of data at the specified address
+    @param dev the device to write to
+    @param reg the register as single byte on the device to write to
+    @param rs  do repeated start when switching from write to read atomic i2c operations
     @return the read data byte
 */
 /**************************************************************************/
@@ -110,6 +101,17 @@ uint8_t I2C::read_byte(uint8_t dev, uint8_t reg, uint8_t rs)
   return rval;
 }
 
+/**************************************************************************/
+/*!
+    @brief read bytes of data at the specified address
+    @param dev the device to write to
+    @param reg the register as single byte on the device to write to
+    @param size number of data bytes requested from the slave
+    @param data array of bytes for storage
+    @param rs do repeated start when switching from write to read atomic i2c operations
+    @return 0 if successful, 1 if failure
+ */
+/**************************************************************************/
 uint8_t I2C::read(uint8_t dev, uint8_t reg, uint16_t size, uint8_t * data, uint8_t rs)
 {
   StartI2C();
@@ -164,10 +166,98 @@ uint8_t I2C::read(uint8_t dev, uint8_t reg, uint16_t size, uint8_t * data, uint8
   return 0;
 }
 
+
 /**************************************************************************/
 /*!
-    @brief  write a byte of data to the specified address
-    @param reg the address to write to
+    @brief read half-words of data at the specified address
+    @param dev the device to write to
+    @param reg the register as half-word on the device to write to - slave requruires HO,LO bytes
+    @param size number of data bytes requested from the slave
+    @param data array of half-words for storage - slave responds with big-endian data which is converted to little-endian
+    @param rs do repeated start when switching from write to read atomic i2c operations
+    @return 0 if successful, 1 if failure
+ */
+/**************************************************************************/
+uint8_t I2C::read(uint8_t dev, uint16_t reg, uint16_t size, uint16_t * data, uint8_t rs)
+{
+  uint8_t * _r = (uint8_t *) & reg;
+
+  StartI2C();
+  IdleI2C();
+
+  MasterWriteI2C(dev<<1); // start transmission to device
+  IdleI2C();     //Wait to complete
+  if ( I2CxSTATbits.ACKSTAT != I2C_ACK )
+    return 1;
+
+  MasterWriteI2C(_r[1]);
+  IdleI2C();     //Wait to complete
+  if ( I2CxSTATbits.ACKSTAT != I2C_ACK )
+    return 1;
+
+  MasterWriteI2C(_r[0]);
+  IdleI2C();     //Wait to complete
+  if ( I2CxSTATbits.ACKSTAT != I2C_ACK )
+    return 1;
+
+  //initiate repeated start and read data
+  if (rs)
+  {
+    RestartI2C();
+    IdleI2C();
+  }
+
+  // Read from device
+  MasterWriteI2C(dev<<1 | 1);
+  IdleI2C();
+  if ( I2CxSTATbits.ACKSTAT != I2C_ACK )
+    return 1;
+
+  uint16_t i=0;
+  while (i<size)
+  {
+    // set pointer
+    _r = (uint8_t *) &data[i];
+
+    // get
+    _r[1] = MasterReadI2C();
+    IdleI2C();
+    //  Send ACK:
+    I2CxCONbits.ACKDT = 0; //Set for ACk
+    I2CxCONbits.ACKEN = 1;
+    while (I2CxCONbits.ACKEN);
+
+    // get LO
+    _r[0] = MasterReadI2C();
+
+    i++;
+
+    if (i<size)
+    {
+      IdleI2C();
+      // Send ACK:
+      I2CxCONbits.ACKDT = 0; //Set for ACk
+      I2CxCONbits.ACKEN = 1;
+      while (I2CxCONbits.ACKEN);
+    }
+  }
+  // Send NACK:
+  I2CxCONbits.ACKDT = 1; //Set for NotACk
+  I2CxCONbits.ACKEN = 1;
+  while (I2CxCONbits.ACKEN); //wait for ACK to complete
+  I2CxCONbits.ACKDT = 0; //Set for NotACk
+
+  StopI2C();
+  IdleI2C();
+
+  return 0;
+}
+
+/**************************************************************************/
+/*!
+    @brief  write a byte of data to a register of a specified device
+    @param dev the device to write to
+    @param reg the register as single byte on the device to write to
     @param data the byte to write
 */
 /**************************************************************************/
@@ -195,8 +285,55 @@ void I2C::write_byte(uint8_t dev, uint8_t reg, uint8_t data)
 
 /**************************************************************************/
 /*!
+    @brief  write a half-word of data to a register of a specified device
+    @param dev the device to write to
+    @param reg the register as half-word on the device to write to
+    @param data the half-word to write to 
+ */
+/**************************************************************************/
+void I2C::write_word(uint8_t dev, uint16_t reg, uint16_t data)
+{
+  uint8_t * _r = (uint8_t *) & reg;
+
+  StartI2C();
+  IdleI2C();
+
+  MasterWriteI2C(dev<<1); // start transmission to device
+  IdleI2C();     //Wait to complete
+  if ( I2CxSTATbits.ACKSTAT != I2C_ACK )
+    return;
+
+  MasterWriteI2C(_r[1]);
+  IdleI2C();     //Wait to complete
+  if ( I2CxSTATbits.ACKSTAT != I2C_ACK )
+    return;
+
+  MasterWriteI2C(_r[0]);
+  IdleI2C();     //Wait to complete
+  if ( I2CxSTATbits.ACKSTAT != I2C_ACK )
+    return;
+
+  _r = (uint8_t *) & data;
+
+  MasterWriteI2C(_r[1]);
+  IdleI2C();     //Wait to complete
+  if ( I2CxSTATbits.ACKSTAT != I2C_ACK )
+    return;
+
+  MasterWriteI2C(_r[0]);
+  IdleI2C();     //Wait to complete
+  if ( I2CxSTATbits.ACKSTAT != I2C_ACK )
+    return;
+
+  StopI2C();
+  IdleI2C();
+}
+
+/**************************************************************************/
+/*!
     @brief write number of bytes to specific register
-    @param reg the address to write to
+    @param dev the device to write to
+    @param reg the register as single byte on the device to write to
     @param size number of bytes to write
     @param data the bytes of data to write
  */
