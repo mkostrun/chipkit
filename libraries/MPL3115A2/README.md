@@ -1,4 +1,4 @@
-#  MPL3115A2 Library for Digilent Chipkit UNO32
+#  MPL3115A2 Library for digilent/chipkit development boards under MPIDE
 
 <img src="https://cdn-shop.adafruit.com/970x728/1893-02.jpg" height="300"/>
 
