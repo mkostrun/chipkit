@@ -19,6 +19,23 @@
 
 /**************************************************************************/
 /*!
+    @brief Re-sets the I2C bus frequency
+    @param freq frequency of I2C bus
+ */
+/**************************************************************************/
+void I2C::SetFrequency(uint32_t freq)
+{
+  // Set the I2C baudrate
+  if (f != freq)
+  {
+    f = freq;
+    I2CSetFrequency(I2Cx, PBCLK, f);
+    IdleI2C();
+  }
+}
+
+/**************************************************************************/
+/*!
     @brief Instantiates I2C class
     @param freq frequency of I2C bus
  */
@@ -41,7 +58,7 @@ I2C::I2C(uint32_t freq)
   I2CConfigure(I2Cx, I2C_ENABLE_HIGH_SPEED);
 
   // Set the I2C baudrate
-  I2CSetFrequency(I2Cx, PBCLK, freq);
+  SetFrequency(freq);
 
   // Start it up
   I2CEnable(I2Cx, (BOOL) 1);
@@ -99,6 +116,139 @@ uint8_t I2C::read_byte(uint8_t dev, uint8_t reg, uint8_t rs)
   IdleI2C();
 
   return rval;
+}
+
+uint8_t I2C::read_byte_no_nack(uint8_t dev, uint8_t reg, uint8_t rs)
+{
+  StartI2C();
+  IdleI2C();
+
+  MasterWriteI2C(dev<<1); // start transmission to device
+  IdleI2C();     //Wait to complete
+  if ( I2CxSTATbits.ACKSTAT != I2C_ACK )
+    return 0;
+
+  MasterWriteI2C(reg);
+  IdleI2C();     //Wait to complete
+  if ( I2CxSTATbits.ACKSTAT != I2C_ACK )
+    return 0;
+
+  StopI2C();
+  IdleI2C();
+
+  if (rs)
+  {
+    //initiate repeated start and read data
+    RestartI2C();
+    IdleI2C();
+  }
+
+  // Read from device
+  MasterWriteI2C(dev<<1 | 1);
+  IdleI2C();     //Wait to complete
+  if ( I2CxSTATbits.ACKSTAT != I2C_ACK )
+    return 0;
+
+  uint8_t rval = MasterReadI2C();
+
+  StopI2C();
+  IdleI2C();
+
+  return rval;
+}
+
+/**************************************************************************/
+/*!
+    @brief read bytes of data at the specified address
+    @param dev the device to write to
+    @param size number of data bytes requested from the slave
+    @param data array of bytes for storage
+    @param s send start condition 
+    @return 0 if successful, 1 if failure
+ */
+/**************************************************************************/
+uint8_t I2C::read(uint8_t dev, uint16_t size, uint8_t * data, uint8_t s)
+{
+  if (s)
+  {
+    StartI2C();
+    IdleI2C();
+  }
+
+  // Read from device
+  MasterWriteI2C(dev<<1 | 1);
+  IdleI2C();
+  if ( I2CxSTATbits.ACKSTAT != I2C_ACK )
+    return 1;
+
+  uint16_t i=0;
+  while (i<size)
+  {
+    data[i] = MasterReadI2C();
+    i++;
+    if (i<size)
+    {
+      IdleI2C();
+      // Send ACK:
+      I2CxCONbits.ACKDT = 0; //Set for ACk
+      I2CxCONbits.ACKEN = 1;
+      while (I2CxCONbits.ACKEN);
+    }
+  }
+  // Send NACK:
+  I2CxCONbits.ACKDT = 1; //Set for NotACk
+  I2CxCONbits.ACKEN = 1;
+  while (I2CxCONbits.ACKEN); //wait for ACK to complete
+  I2CxCONbits.ACKDT = 0; //Set for NotACk
+
+  StopI2C();
+  IdleI2C();
+
+  return 0;
+}
+
+/**************************************************************************/
+/*!
+    @brief read bytes of data at the specified address without NACK at the end, just stop
+    @param dev the device to write to
+    @param size number of data bytes requested from the slave
+    @param data array of bytes for storage
+    @param s send start condition 
+    @return 0 if successful, 1 if failure
+ */
+uint8_t I2C::read_no_nack(uint8_t dev, uint16_t size, uint8_t * data, uint8_t s)
+{
+  if (s)
+  {
+    StartI2C();
+    IdleI2C();
+  }
+
+  // Read from device
+  MasterWriteI2C(dev<<1 | 1);
+  IdleI2C();
+  if ( I2CxSTATbits.ACKSTAT != I2C_ACK )
+    return 1;
+
+  uint16_t i=0;
+  while (i<size)
+  {
+    data[i] = MasterReadI2C();
+    i++;
+    if (i<size)
+    {
+      IdleI2C();
+      // Send ACK:
+      I2CxCONbits.ACKDT = 0; //Set for ACk
+      I2CxCONbits.ACKEN = 1;
+      while (I2CxCONbits.ACKEN);
+    }
+  }
+
+  StopI2C();
+  IdleI2C();
+
+  return 0;
 }
 
 /**************************************************************************/
@@ -165,7 +315,6 @@ uint8_t I2C::read(uint8_t dev, uint8_t reg, uint16_t size, uint8_t * data, uint8
 
   return 0;
 }
-
 
 /**************************************************************************/
 /*!
@@ -251,6 +400,33 @@ uint8_t I2C::read(uint8_t dev, uint16_t reg, uint16_t size, uint16_t * data, uin
   IdleI2C();
 
   return 0;
+}
+
+/**************************************************************************/
+/*!
+    @brief  write register of a specified device
+    @param dev the device to write to
+    @param reg the register as single byte on the device to write to
+    @param data the byte to write
+ */
+/**************************************************************************/
+void I2C::write_reg(uint8_t dev, uint8_t reg)
+{
+  StartI2C();
+  IdleI2C();
+
+  MasterWriteI2C(dev<<1); // start transmission to device
+  IdleI2C();
+  if ( I2CxSTATbits.ACKSTAT != I2C_ACK ) // slave should respond with ACK
+    return;
+
+  MasterWriteI2C(reg);
+  IdleI2C();
+  if ( I2CxSTATbits.ACKSTAT != I2C_ACK ) // slave should respond with ACK
+    return;
+
+  StopI2C();
+  IdleI2C();
 }
 
 /**************************************************************************/
@@ -351,6 +527,9 @@ void I2C::write(uint8_t dev, uint8_t reg, uint16_t size, uint8_t * data)
   MasterWriteI2C(reg);
   IdleI2C();
   if ( I2CxSTATbits.ACKSTAT != I2C_ACK )
+    return;
+
+  if (!size)
     return;
 
   uint16_t i = 0;

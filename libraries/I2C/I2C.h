@@ -59,16 +59,21 @@ class I2C
 {
   public:
     I2C(uint32_t freq = 100000);
+    void SetFrequency(uint32_t f);
+    uint8_t read (uint8_t dev, uint16_t size, uint8_t * data, uint8_t s);
+    uint8_t read_no_nack(uint8_t dev, uint16_t size, uint8_t * data, uint8_t s);
     uint8_t read (uint8_t dev, uint8_t reg, uint16_t size, uint8_t * data, uint8_t rs);
     uint8_t read (uint8_t dev, uint16_t reg, uint16_t size, uint16_t * data, uint8_t rs);
     uint8_t read_byte (uint8_t dev, uint8_t reg, uint8_t rs);
+    uint8_t read_byte_no_nack(uint8_t dev, uint8_t reg, uint8_t rs);
+    void write_reg(uint8_t dev, uint8_t reg);
     void write_byte (uint8_t dev, uint8_t reg, uint8_t data);
     void write_word(uint8_t dev, uint16_t reg, uint16_t data);
     void write (uint8_t dev, uint8_t reg, uint16_t size, uint8_t * data);
 
   private:
     uint8_t _init;
-    uint32_t _freq;
+    uint32_t f;
 };
 
 
