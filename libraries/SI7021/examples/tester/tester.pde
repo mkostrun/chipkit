@@ -41,9 +41,4 @@ void loop()
   {
     print_all();
   }
-/*  else
-  {
-    Serial.print("Nothing yet\n");
-  }
-  delay(500);*/
 }
