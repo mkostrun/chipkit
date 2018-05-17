@@ -205,7 +205,7 @@ void CCS811::setEnvironmentalData(float humidity, float temp)
   The internal algorithm uses these values (or default values if
   not set by the application) to compensate for changes in
   relative humidity and ambient temperature.*/
-  d = 512.0f * temp;
+  d = 512.0f * (temp - 25.0f);
   t = (uint16_t) d;
   
   uint8_t buf[] = { h_ptr[1], h_ptr[0], t_ptr[1], t_ptr[0]};
