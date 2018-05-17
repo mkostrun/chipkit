@@ -55,12 +55,15 @@ I2C::I2C(uint32_t freq)
 #endif
 
   // Configure Various I2C Options
-  I2CConfigure(I2Cx, I2C_ENABLE_HIGH_SPEED);
+  //I2CConfigure(I2Cx, I2C_ENABLE_HIGH_SPEED);
+  I2CConfigure(I2Cx, I2C_ENABLE_SLAVE_CLOCK_STRETCHING);
+
 
   // Set the I2C baudrate
   SetFrequency(freq);
 
   // Start it up
+//   OpenI2C1(I2C_ON | I2C_7BIT_ADD | I2C_STR_EN, BRG_VAL);
   I2CEnable(I2Cx, (BOOL) 1);
 
   _init = 1;
@@ -126,12 +129,12 @@ uint8_t I2C::read_byte_no_nack(uint8_t dev, uint8_t reg, uint8_t rs)
   MasterWriteI2C(dev<<1); // start transmission to device
   IdleI2C();     //Wait to complete
   if ( I2CxSTATbits.ACKSTAT != I2C_ACK )
-    return 0;
+    return 0xff;
 
   MasterWriteI2C(reg);
   IdleI2C();     //Wait to complete
   if ( I2CxSTATbits.ACKSTAT != I2C_ACK )
-    return 0;
+    return 0xfe;
 
   StopI2C();
   IdleI2C();
@@ -147,9 +150,10 @@ uint8_t I2C::read_byte_no_nack(uint8_t dev, uint8_t reg, uint8_t rs)
   MasterWriteI2C(dev<<1 | 1);
   IdleI2C();     //Wait to complete
   if ( I2CxSTATbits.ACKSTAT != I2C_ACK )
-    return 0;
+    return 0xfd;
 
   uint8_t rval = MasterReadI2C();
+  IdleI2C();
 
   StopI2C();
   IdleI2C();
@@ -185,16 +189,17 @@ uint8_t I2C::read(uint8_t dev, uint16_t size, uint8_t * data, uint8_t s)
   while (i<size)
   {
     data[i] = MasterReadI2C();
+    IdleI2C();
     i++;
     if (i<size)
     {
-      IdleI2C();
       // Send ACK:
       I2CxCONbits.ACKDT = 0; //Set for ACk
       I2CxCONbits.ACKEN = 1;
       while (I2CxCONbits.ACKEN);
     }
   }
+
   // Send NACK:
   I2CxCONbits.ACKDT = 1; //Set for NotACk
   I2CxCONbits.ACKEN = 1;
@@ -526,12 +531,12 @@ void I2C::write(uint8_t dev, uint8_t reg, uint16_t size, uint8_t * data)
 
   MasterWriteI2C(reg);
   IdleI2C();
+
+  // wait for slave to acknowledge
   if ( I2CxSTATbits.ACKSTAT != I2C_ACK )
     return;
 
-  if (!size)
-    return;
-
+  // send bytes
   uint16_t i = 0;
   while (i<size)
   {
@@ -545,6 +550,7 @@ void I2C::write(uint8_t dev, uint8_t reg, uint16_t size, uint8_t * data)
     }
   }
 
+  // done with transmissions
   StopI2C();
   IdleI2C();
 }
