@@ -22,7 +22,7 @@
 
 #include <I2C.h>
 
-#define  DELTA(u32_x,u32_y)  ((u32_x) > (u32_y) ? (u32_x)-(u32_y) : ((0xffffffff - (u32_y)) + (u32_x)))
+#define  DELTA(u32_x,u32_y)  ( (u32_x) >= (u32_y) ? (u32_x)-(u32_y) : ((0xffffffff - (u32_y)) + (u32_x)) )
 
 /**************************************************************************/
 /*!
@@ -92,8 +92,9 @@ class MLX90640
     int8_t CheckAdjacentPixels(uint16_t pix1, uint16_t pix2);
     int8_t ExtractDeviatingPixels(uint16_t * eeData);
 
-    uint8_t state;
-    uint32_t counter_us;
+    uint8_t  state;
+    uint32_t refresh_period_ms;
+    uint32_t counter_ms;
 };
 
 
